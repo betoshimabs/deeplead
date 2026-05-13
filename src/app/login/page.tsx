@@ -6,7 +6,7 @@ import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function LoginPage() {
-  const { switchUser, devUsers } = useApp();
+  const { devUsers } = useApp();
   const router = useRouter();
   const [email, setEmail] = useState('bryan@valore.com.br');
   const [password, setPassword] = useState('deeplead2026');
@@ -21,8 +21,12 @@ export default function LoginPage() {
     await new Promise(r => setTimeout(r, 900));
     const matched = devUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (matched && password) {
-      switchUser(matched.id);
-      router.push('/dashboard');
+      // Set user preference in localStorage before navigating.
+      // Use window.location (full reload) so AppContext re-initializes cleanly
+      // with the correct user — avoids race conditions with isSwitching state.
+      localStorage.setItem('dl_active_user', matched.id);
+      localStorage.removeItem('dl_active_business'); // will be resolved by /api/me
+      window.location.href = '/dashboard';
     } else if (!matched) {
       setError('Email não encontrado. Use a conta de demonstração abaixo.');
       setLoading(false);

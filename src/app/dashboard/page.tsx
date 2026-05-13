@@ -273,7 +273,7 @@ function NoBusiness() {
 
 // ─── Main Dashboard Page ──────────────────────────────────────
 export default function DashboardPage() {
-  const { user, business, activeUserId } = useApp();
+  const { user, business, activeUserId, isLoadingUser } = useApp();
   const devUser = (user as any);
   const role: string = devUser?.role ?? 'colaborador';
   const canToggleView = role === 'dono' || role === 'gestor';
@@ -300,7 +300,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(async () => {
-    if (!business) return;
+    if (!business || isLoadingUser) return; // wait for AppContext to finish loading
     setLoading(true);
     setError(null);
     try {
@@ -312,7 +312,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [days, view, business, activeUserId]);
+  }, [days, view, business, activeUserId, isLoadingUser]);
 
   useEffect(() => { load(); }, [load]);
 

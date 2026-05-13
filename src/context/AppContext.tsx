@@ -171,8 +171,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── switchUser ────────────────────────────────────────────────────────────
   const switchUser = useCallback((id: string) => {
     setIsSwitching(true);
-    // Clear business preference so /api/me picks first available
-    localStorage.removeItem('dl_active_business');
+    // Do NOT remove dl_active_business here — it causes a race condition where
+    // other pages try to fetch API with missing header during the 800ms window.
+    // loadUser will update it properly once the API call completes.
     setTimeout(async () => {
       await loadUser(id);
       setIsSwitching(false);
