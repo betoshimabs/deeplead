@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // Disable Turbopack for production — Next.js 16 canary Turbopack
+    // has compatibility issues with Vercel's deployment infrastructure
+    turbopack: false,
+  } as any,
 };
 
 export default nextConfig;
