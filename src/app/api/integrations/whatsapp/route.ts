@@ -13,31 +13,32 @@ export async function GET(req: NextRequest) {
   const businessId = req.headers.get('x-business-id');
   if (!businessId) return NextResponse.json({ error: 'Missing x-business-id' }, { status: 400 });
 
-  const { data, error } = await supabaseAdmin
-    .schema('integrations')
-    .from('channels')
-    .select('id, status, display_name, phone_number_id, connected_at, metadata')
-    .eq('business_id', businessId)
-    .eq('type', 'whatsapp')
-    .maybeSingle();
+  // Use RPC helper to avoid PostgREST schema-switching restriction
+  const { data, error } = await supabaseAdmin.rpc('get_whatsapp_channel', {
+    p_business_id: businessId,
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[GET /api/integrations/whatsapp]', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  if (!data) return NextResponse.json({ connected: false });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return NextResponse.json({ connected: false });
 
   return NextResponse.json({
-    connected: data.status === 'active',
+    connected: row.status === 'active',
     channel: {
-      id: data.id,
-      status: data.status,
-      display_name: data.display_name,
-      phone_number_id: data.phone_number_id,
-      connected_at: data.connected_at,
+      id: row.id,
+      status: row.status,
+      display_name: row.display_name,
+      phone_number_id: row.phone_number_id,
+      connected_at: row.connected_at,
     },
   });
 }
 
-// POST — connect WhatsApp (save credentials + verify with Meta)
+// POST — connect WhatsApp (verify credentials with Meta, then save)
 export async function POST(req: NextRequest) {
   const businessId = req.headers.get('x-business-id');
   if (!businessId) return NextResponse.json({ error: 'Missing x-business-id' }, { status: 400 });
@@ -64,42 +65,39 @@ export async function POST(req: NextRequest) {
     }
 
     displayName = metaData.verified_name || metaData.display_phone_number || 'WhatsApp Business';
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'Não foi possível conectar à API da Meta. Tente novamente.' }, { status: 502 });
   }
 
   // 2. Generate a secure verify token for this business's webhook
   const verifyToken = `dl_${businessId.replace(/-/g, '').slice(0, 8)}_${Math.random().toString(36).slice(2, 10)}`;
 
-  // 3. Upsert channel record
-  const { data, error } = await supabaseAdmin
-    .schema('integrations')
-    .from('channels')
-    .upsert({
-      business_id: businessId,
-      type: 'whatsapp',
-      status: 'active',
-      phone_number_id,
-      access_token, // stored server-side only, never returned to client
-      display_name: displayName,
-      verify_token: verifyToken,
-      connected_at: new Date().toISOString(),
-      metadata: { display_phone_number: displayName },
-    }, { onConflict: 'business_id,type' })
-    .select('id, display_name, phone_number_id, connected_at')
-    .single();
+  // 3. Upsert channel record via RPC helper
+  const { data, error } = await supabaseAdmin.rpc('upsert_whatsapp_channel', {
+    p_business_id: businessId,
+    p_phone_number_id: phone_number_id,
+    p_access_token: access_token,
+    p_display_name: displayName,
+    p_verify_token: verifyToken,
+    p_metadata: { display_phone_number: displayName },
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[POST /api/integrations/whatsapp]', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
 
   return NextResponse.json({
     success: true,
     channel: {
-      display_name: data.display_name,
-      phone_number_id: data.phone_number_id,
-      connected_at: data.connected_at,
+      display_name: row?.display_name ?? displayName,
+      phone_number_id: row?.phone_number_id ?? phone_number_id,
+      connected_at: row?.connected_at ?? new Date().toISOString(),
     },
     webhook: {
-      url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://your-domain.vercel.app'}/api/webhooks/whatsapp`,
+      url: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://deeplead-chi.vercel.app'}/api/webhooks/whatsapp`,
       verify_token: verifyToken,
     },
   });
@@ -110,13 +108,14 @@ export async function DELETE(req: NextRequest) {
   const businessId = req.headers.get('x-business-id');
   if (!businessId) return NextResponse.json({ error: 'Missing x-business-id' }, { status: 400 });
 
-  const { error } = await supabaseAdmin
-    .schema('integrations')
-    .from('channels')
-    .update({ status: 'inactive', access_token: null })
-    .eq('business_id', businessId)
-    .eq('type', 'whatsapp');
+  const { error } = await supabaseAdmin.rpc('disconnect_whatsapp_channel', {
+    p_business_id: businessId,
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[DELETE /api/integrations/whatsapp]', error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
   return NextResponse.json({ success: true });
 }
