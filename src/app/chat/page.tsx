@@ -258,14 +258,14 @@ function ChatContent() {
         filter: `conversation_id=eq.${selectedId}`
       }, payload => {
         const newMsg = payload.new as Msg;
-        // Avoid duplicating optimistic messages (we assume realtime returns proper ID)
+        // Append optimistically for instant feedback
         setMessages(prev => {
           if (prev.some(m => m.id === newMsg.id)) return prev;
-          // Let's refetch to get the sender join, or just append with unknown sender for now
-          // For simplicity, we just trigger a refetch of messages to get full relations
-          return prev;
+          return [...prev, { ...newMsg, sender: null }]; // Null sender initially, will be updated by fetch
         });
-        // We trigger a refetch of messages to guarantee we have the joined data (like sender.name)
+        
+        // Trigger a refetch to get the joined data (like sender.name)
+
         fetchMessages(selectedId).then(data => setMessages(data));
         
         // Update unread count if it's not from agent
