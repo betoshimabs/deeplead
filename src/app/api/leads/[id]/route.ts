@@ -79,7 +79,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   await admin.rpc('log_activity', {
     p_lead_id: id, p_type: 'note',
     p_description: 'Lead removido do sistema.',
-    p_actor_id: actorId, p_metadata: {},
+    p_actor_id: DEMO_ACTOR, p_metadata: {},
   }).catch(() => {}); // best-effort, don't block delete
   const { error } = await admin.schema('crm').from('leads').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
