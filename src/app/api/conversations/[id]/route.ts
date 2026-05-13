@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // --- REAL WHATSAPP DELIVERY ---
   if (body.sender_type === 'agent') {
     try {
-      // Get conversation + lead phone
+      // Get conversation + lead phone (messaging schema — should be exposed)
       const { data: conv } = await supabaseAdmin
         .schema('messaging')
         .from('conversations')
@@ -63,24 +63,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .single();
 
       if (conv?.channel === 'whatsapp') {
-        const [{ data: lead }, { data: channel }] = await Promise.all([
-          supabaseAdmin.schema('crm').from('leads').select('phone').eq('id', conv.lead_id).single(),
-          supabaseAdmin.schema('integrations').from('channels')
-            .select('phone_number_id, access_token')
-            .eq('business_id', conv.business_id)
-            .eq('type', 'whatsapp')
-            .eq('status', 'active')
-            .maybeSingle(),
-        ]);
+        // Fetch lead phone from crm schema
+        const { data: lead } = await supabaseAdmin
+          .schema('crm')
+          .from('leads')
+          .select('phone')
+          .eq('id', conv.lead_id)
+          .single();
 
-        if (lead?.phone && channel?.phone_number_id && channel?.access_token) {
-          const toPhone = lead.phone.replace(/\D/g, ''); // strip non-digits
+        // Fetch WhatsApp credentials via RPC (avoids integrations schema restriction)
+        const { data: credRows } = await supabaseAdmin.rpc('get_whatsapp_credentials', {
+          p_business_id: conv.business_id,
+        });
+        const cred = Array.isArray(credRows) ? credRows[0] : credRows;
+
+        if (lead?.phone && cred?.phone_number_id && cred?.access_token) {
+          const toPhone = lead.phone.replace(/\D/g, ''); // strip non-digits, keep DDI
           const metaRes = await fetch(
-            `https://graph.facebook.com/v19.0/${channel.phone_number_id}/messages`,
+            `https://graph.facebook.com/v25.0/${cred.phone_number_id}/messages`,
             {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${channel.access_token}`,
+                'Authorization': `Bearer ${cred.access_token}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
@@ -96,7 +100,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             const metaData = await metaRes.json();
             const wamid = metaData.messages?.[0]?.id;
             if (wamid) {
-              // Save the wamid for delivery tracking
+              // Save wamid for delivery status tracking
               await supabaseAdmin
                 .schema('messaging')
                 .from('messages')
@@ -105,12 +109,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             }
           } else {
             const errData = await metaRes.json();
-            console.error('[WhatsApp Send] Meta API error:', errData);
+            console.error('[WhatsApp Send] Meta API error:', JSON.stringify(errData));
           }
         }
       }
     } catch (whatsappErr) {
-      // Don't fail the request if WhatsApp delivery fails — message is already saved
+      // Don't fail the request — message is already saved in DB
       console.error('[WhatsApp Send] Delivery error:', whatsappErr);
     }
   }
