@@ -11,29 +11,32 @@ const META_API = 'https://graph.facebook.com/v19.0';
 // ─── GET — Meta webhook verification handshake ───────────────────────────────
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const mode       = searchParams.get('hub.mode');
-  const token      = searchParams.get('hub.verify_token');
-  const challenge  = searchParams.get('hub.challenge');
+  const mode      = searchParams.get('hub.mode');
+  const token     = searchParams.get('hub.verify_token');
+  const challenge = searchParams.get('hub.challenge');
 
   if (mode !== 'subscribe' || !token) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  // Find the channel with this verify_token
-  const { data: channel } = await supabaseAdmin
-    .schema('integrations')
-    .from('channels')
-    .select('id')
-    .eq('verify_token', token)
-    .eq('type', 'whatsapp')
-    .maybeSingle();
+  // Find the channel with this verify_token using RPC helper
+  const { data, error } = await supabaseAdmin.rpc('find_channel_by_verify_token', {
+    p_token: token,
+  });
 
+  if (error) {
+    console.error('[Webhook GET] DB error:', error.message);
+    return new NextResponse('Server Error', { status: 500 });
+  }
+
+  const channel = Array.isArray(data) ? data[0] : data;
   if (!channel) {
+    console.warn('[Webhook GET] No channel found for token:', token);
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  // Echo the challenge back — Meta requires plain text integer
-  return new NextResponse(challenge, { status: 200 });
+  // Echo the challenge back — Meta requires plain text
+  return new NextResponse(challenge ?? '', { status: 200 });
 }
 
 // ─── POST — Receive incoming WhatsApp messages ───────────────────────────────
@@ -45,41 +48,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  // Meta sends a status=200 check — always acknowledge immediately
+  // Meta requires immediate 200 acknowledgement
   const ack = NextResponse.json({ status: 'ok' }, { status: 200 });
 
   try {
-    const entry = body?.entry?.[0];
+    const entry   = body?.entry?.[0];
     const changes = entry?.changes?.[0];
-    const value = changes?.value;
+    const value   = changes?.value;
 
-    if (!value?.messages?.length) return ack; // status updates, etc.
+    if (!value?.messages?.length) return ack; // status updates, reactions, etc.
 
-    const msg         = value.messages[0];
+    const msg           = value.messages[0];
     const phoneNumberId = value.metadata?.phone_number_id;
-    const fromPhone   = msg.from; // sender's WhatsApp number (e.g. "5511999990000")
-    const msgText     = msg.text?.body ?? '[Mídia não suportada]';
-    const wamid       = msg.id; // WhatsApp message ID
+    const fromPhone     = msg.from;
+    const msgText       = msg.text?.body ?? '[Mídia não suportada]';
+    const wamid         = msg.id;
 
     if (!phoneNumberId || !fromPhone) return ack;
 
     // 1. Find which business this phone number belongs to
-    const { data: channelInfo } = await supabaseAdmin
-      .rpc('find_business_by_phone', { p_phone_number_id: phoneNumberId })
-      .single() as any;
+    const { data: channelRows } = await supabaseAdmin.rpc('find_business_by_phone', {
+      p_phone_number_id: phoneNumberId,
+    });
 
+    const channelInfo = Array.isArray(channelRows) ? channelRows[0] : channelRows;
     if (!channelInfo) {
-      console.warn('[Webhook] No active channel found for phone_number_id:', phoneNumberId);
+      console.warn('[Webhook] No active channel for phone_number_id:', phoneNumberId);
       return ack;
     }
 
     const businessId = channelInfo.business_id;
     const channelId  = channelInfo.channel_id;
-
-    // 2. Upsert contact/lead by phone number
     const formattedPhone = `+${fromPhone}`;
-    let leadId: string;
 
+    // 2. Upsert lead by phone number (crm schema)
+    let leadId: string;
     const { data: existingLead } = await supabaseAdmin
       .schema('crm')
       .from('leads')
@@ -91,7 +94,6 @@ export async function POST(req: NextRequest) {
     if (existingLead) {
       leadId = existingLead.id;
     } else {
-      // Create new lead from WhatsApp contact
       const contactName = value.contacts?.[0]?.profile?.name ?? formattedPhone;
       const { data: newLead, error: leadErr } = await supabaseAdmin
         .schema('crm')
@@ -108,14 +110,11 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single();
 
-      if (leadErr) {
-        console.error('[Webhook] Failed to create lead:', leadErr);
-        return ack;
-      }
+      if (leadErr) { console.error('[Webhook] Lead insert error:', leadErr); return ack; }
       leadId = newLead.id;
     }
 
-    // 3. Upsert conversation
+    // 3. Upsert conversation (messaging schema)
     const { data: existingConv } = await supabaseAdmin
       .schema('messaging')
       .from('conversations')
@@ -155,14 +154,11 @@ export async function POST(req: NextRequest) {
         .select('id')
         .single();
 
-      if (convErr) {
-        console.error('[Webhook] Failed to create conversation:', convErr);
-        return ack;
-      }
+      if (convErr) { console.error('[Webhook] Conv insert error:', convErr); return ack; }
       conversationId = newConv.id;
     }
 
-    // 4. Insert message (check external_id to avoid duplicates)
+    // 4. Insert message — deduplicate by external_id (messaging schema)
     const { data: existingMsg } = await supabaseAdmin
       .schema('messaging')
       .from('messages')
@@ -183,22 +179,19 @@ export async function POST(req: NextRequest) {
         });
     }
 
-    // 5. Log webhook
-    await supabaseAdmin
-      .schema('integrations')
-      .from('webhook_logs')
-      .insert({
-        business_id: businessId,
-        channel_id: channelId,
-        source: 'whatsapp',
-        event_type: msg.type ?? 'text',
-        payload: body,
-        processed: true,
-      });
+    // 5. Log webhook via RPC helper (avoids integrations schema restriction)
+    await supabaseAdmin.rpc('log_webhook_event', {
+      p_business_id: businessId,
+      p_channel_id: channelId,
+      p_source: 'whatsapp',
+      p_event_type: msg.type ?? 'text',
+      p_payload: body,
+      p_processed: true,
+    });
 
   } catch (err) {
     console.error('[Webhook] Unhandled error:', err);
-    // Always return 200 to Meta so it doesn't retry endlessly
+    // Always return 200 so Meta doesn't retry endlessly
   }
 
   return ack;
