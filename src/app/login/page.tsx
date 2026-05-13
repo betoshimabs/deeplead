@@ -6,7 +6,7 @@ import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function LoginPage() {
-  const { login } = useApp();
+  const { switchUser, devUsers } = useApp();
   const router = useRouter();
   const [email, setEmail] = useState('bryan@valore.com.br');
   const [password, setPassword] = useState('deeplead2026');
@@ -19,9 +19,13 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     await new Promise(r => setTimeout(r, 900));
-    if (email && password) {
-      login();
+    const matched = devUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (matched && password) {
+      switchUser(matched.id);
       router.push('/dashboard');
+    } else if (!matched) {
+      setError('Email não encontrado. Use a conta de demonstração abaixo.');
+      setLoading(false);
     } else {
       setError('Preencha todos os campos.');
       setLoading(false);
