@@ -248,16 +248,11 @@ function ChatContent() {
       .catch(() => {})
       .finally(() => setLoadingMsgs(false));
 
-    // Subscribe to realtime messages
+    // Subscribe to realtime messages using Broadcast (Foolproof, bypasses Postgres replication issues)
     const supabase = createClient();
-    const channel = supabase.channel(`messages:${selectedId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'messaging',
-        table: 'messages',
-        filter: `conversation_id=eq.${selectedId}`
-      }, payload => {
-        const newMsg = payload.new as Msg;
+    const channel = supabase.channel(`chat_${selectedId}`)
+      .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+        const newMsg = payload as Msg;
         // Append optimistically for instant feedback
         setMessages(prev => {
           if (prev.some(m => m.id === newMsg.id)) return prev;

@@ -119,6 +119,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
+  // BROADCAST to the frontend instantly (for other tabs)
+  await supabaseAdmin.channel(`chat_${id}`).send({
+    type: 'broadcast',
+    event: 'new_message',
+    payload: data
+  });
+
   return NextResponse.json({ data }, { status: 201 });
 }
 

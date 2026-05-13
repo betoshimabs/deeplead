@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (!existingMsg) {
-      await supabaseAdmin
+      const { data: messageData } = await supabaseAdmin
         .schema('messaging')
         .from('messages')
         .insert({
@@ -176,7 +176,24 @@ export async function POST(req: NextRequest) {
           content: msgText,
           external_id: wamid,
           read: false,
-        });
+        })
+        .select('*')
+        .single();
+
+          // Log the message interaction
+          await supabaseAdmin.rpc('log_integration_event', {
+            p_business_id: businessId,
+            p_channel_id: channelId,
+            p_event_type: 'message_received',
+            p_status: 'success'
+          });
+
+          // BROADCAST to the frontend instantly
+          await supabaseAdmin.channel(`chat_${conversationId}`).send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: messageData
+          });
     }
 
     // 5. Log webhook via RPC helper (avoids integrations schema restriction)
