@@ -286,14 +286,19 @@ export function WhatsAppIntegrationCard({ canManage }: { canManage: boolean }) {
   const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
 
   const loadStatus = useCallback(async () => {
+    const businessId = localStorage.getItem('dl_active_business');
+    if (!businessId) { setLoading(false); return; } // no business yet, skip
     setLoading(true);
     try {
       const res = await fetch('/api/integrations/whatsapp', {
-        headers: { 'x-business-id': localStorage.getItem('dl_active_business') ?? '' },
+        headers: { 'x-business-id': businessId },
       });
+      if (!res.ok) { setLoading(false); return; } // server error, show disconnected state
       const json = await res.json();
-      setConnected(json.connected);
+      setConnected(json.connected ?? false);
       setChannel(json.channel ?? null);
+    } catch {
+      // network error — show as disconnected, don't crash
     } finally {
       setLoading(false);
     }
