@@ -6,7 +6,8 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SECRET_KEY!
 );
 
-const META_API = 'https://graph.facebook.com/v19.0';
+const META_API = 'https://graph.facebook.com/v25.0';
+
 
 // GET — returns WhatsApp channel status (no token exposed to client)
 export async function GET(req: NextRequest) {
