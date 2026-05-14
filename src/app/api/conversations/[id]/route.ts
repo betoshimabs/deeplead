@@ -63,13 +63,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .single();
 
       if (conv?.channel === 'whatsapp') {
-        // Fetch lead phone from crm schema
+        // Phone is now in crm.contacts — fetch via lead.contact_id
         const { data: lead } = await supabaseAdmin
           .schema('crm')
           .from('leads')
-          .select('phone')
+          .select('contact_id')
           .eq('id', conv.lead_id)
           .single();
+
+        const { data: contact } = lead?.contact_id
+          ? await supabaseAdmin
+              .schema('crm')
+              .from('contacts')
+              .select('phone')
+              .eq('id', lead.contact_id)
+              .single()
+          : { data: null };
 
         // Fetch WhatsApp credentials via RPC (avoids integrations schema restriction)
         const { data: credRows } = await supabaseAdmin.rpc('get_whatsapp_credentials', {
@@ -77,8 +86,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         });
         const cred = Array.isArray(credRows) ? credRows[0] : credRows;
 
-        if (lead?.phone && cred?.phone_number_id && cred?.access_token) {
-          const toPhone = lead.phone.replace(/\D/g, ''); // strip non-digits, keep DDI
+        if (contact?.phone && cred?.phone_number_id && cred?.access_token) {
+          const toPhone = contact.phone.replace(/\D/g, ''); // strip non-digits, keep DDI
           const metaRes = await fetch(
             `https://graph.facebook.com/v25.0/${cred.phone_number_id}/messages`,
             {
@@ -111,6 +120,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             const errData = await metaRes.json();
             console.error('[WhatsApp Send] Meta API error:', JSON.stringify(errData));
           }
+        } else {
+          console.warn('[WhatsApp Send] Missing phone or credentials:', { phone: contact?.phone, hasCredentials: !!cred });
         }
       }
     } catch (whatsappErr) {
