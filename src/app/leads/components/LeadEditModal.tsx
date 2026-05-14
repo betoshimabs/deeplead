@@ -21,26 +21,6 @@ const STAGES = [
   { value: 'lost',              label: 'Perdido' },
 ];
 
-const STATUSES = [
-  { value: 'new',      label: 'Novo' },
-  { value: 'open',     label: 'Aberto' },
-  { value: 'pending',  label: 'Pendente' },
-  { value: 'resolved', label: 'Resolvido' },
-  { value: 'won',      label: 'Ganho' },
-  { value: 'lost',     label: 'Perdido' },
-];
-
-const SOURCES = [
-  { value: 'whatsapp',  label: '💬 WhatsApp' },
-  { value: 'instagram', label: '📸 Instagram' },
-  { value: 'facebook',  label: '👤 Facebook' },
-  { value: 'website',   label: '🌐 Site' },
-  { value: 'referral',  label: '🤝 Indicação' },
-  { value: 'direct',    label: '📞 Direto' },
-  { value: 'tiktok',    label: '🎵 TikTok' },
-  { value: 'import',    label: '📥 Importação' },
-];
-
 const MARITAL = [
   { value: 'single',   label: 'Solteiro(a)' },
   { value: 'married',  label: 'Casado(a)' },
@@ -127,13 +107,7 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
   useEffect(() => {
     if (lead) {
       setForm({
-        name:             lead.name ?? '',
-        phone:            lead.phone ?? '',
-        secondary_phone:  lead.secondary_phone ?? '',
-        email:            lead.email ?? '',
-        status:           lead.status ?? 'new',
         stage:            lead.stage ?? 'new_lead',
-        source:           lead.source ?? 'direct',
         score:            lead.score ?? 50,
         occupation:       lead.occupation ?? '',
         employer:         lead.employer ?? '',
@@ -163,8 +137,7 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
       });
     } else {
       setForm({
-        name: '', phone: '', secondary_phone: '', email: '',
-        status: 'new', stage: 'new_lead', source: 'direct', score: 50,
+        stage: 'new_lead', score: 50,
         occupation: '', employer: '', employment_type: '', monthly_income: '',
         marital_status: '', dependents_count: 0, ip_city: '', ip_state: '',
         notes: '', tags: '',
@@ -182,10 +155,6 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
   const setP = (k: string, v: any) => setProfile(p => ({ ...p, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.name || !form.phone) {
-      alert('Nome e telefone são obrigatórios.');
-      return;
-    }
     setSaving(true);
     try {
       const cleanForm = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, v === '' ? null : v]));
@@ -210,10 +179,8 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
       if (lead) {
         await updateLead(lead.id, { ...leadPayload, real_estate_profile: profilePayload } as Record<string, unknown>);
         onSaved({ ...leadPayload, real_estate_profile: profilePayload } as Partial<Lead>);
-      } else {
-        const created = await createLead({ ...leadPayload, real_estate_profile: profilePayload } as Record<string, unknown>);
-        onSaved(created.data ?? created);
       }
+      // Note: leads can no longer be created directly — must convert from contact
       onClose();
     } catch (e) {
       console.error(e);
@@ -223,10 +190,12 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
     }
   };
 
+  const contact = (lead as any)?.contact ?? {};
+
   if (!open) return null;
 
   const SECTIONS: { key: Section; label: string }[] = [
-    { key: 'contact',     label: 'Contato' },
+    { key: 'contact',     label: 'Qualificação' },
     { key: 'profile',     label: 'Perfil' },
     { key: 'real_estate', label: 'Imobiliário' },
   ];
@@ -241,8 +210,8 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
           {/* Header */}
           <div className="px-6 py-4 border-b border-[#EDF0F4] flex items-center justify-between shrink-0">
             <div>
-              <h2 className="font-semibold text-[#2F4251]">{lead ? 'Editar Lead' : 'Novo Lead'}</h2>
-              {lead && <p className="text-xs text-[#8A9BB0] mt-0.5">{lead.name}</p>}
+              <h2 className="font-semibold text-[#2F4251]">{lead ? 'Editar Lead' : 'Lead (somente via conversão)'}</h2>
+              {lead && <p className="text-xs text-[#8A9BB0] mt-0.5">{contact.name}</p>}
             </div>
             <button onClick={onClose} className="w-8 h-8 rounded-xl hover:bg-[#F4F7FA] flex items-center justify-center text-[#8A9BB0]">
               <X size={16} />
@@ -266,34 +235,23 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
           {/* Scrollable body */}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
-            {/* CONTACT */}
+            {/* QUALIFICATION (was CONTACT) */}
             {activeSection === 'contact' && (
               <>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Nome completo">
-                    <Input value={form.name} onChange={v => setF('name', v)} placeholder="Nome do lead" />
-                  </Field>
-                  <Field label="Status">
-                    <Select value={form.status} onChange={v => setF('status', v)} options={STATUSES} />
-                  </Field>
+                <div className="p-3 bg-[#EBF7FA] rounded-xl mb-2">
+                  <p className="text-xs text-[#127284] font-medium">Identidade via contato: <span className="font-bold">{contact.name}</span>{contact.phone ? ` · ${contact.phone}` : ''}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Telefone principal">
-                    <Input value={form.phone} onChange={v => setF('phone', v)} placeholder="(71) 99999-0000" />
-                  </Field>
-                  <Field label="Telefone secundário">
-                    <Input value={form.secondary_phone} onChange={v => setF('secondary_phone', v)} placeholder="(71) 99999-0000" />
-                  </Field>
-                </div>
-                <Field label="E-mail">
-                  <Input value={form.email} onChange={v => setF('email', v)} placeholder="email@exemplo.com" type="email" />
-                </Field>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Etapa do pipeline">
                     <Select value={form.stage} onChange={v => setF('stage', v)} options={STAGES} />
                   </Field>
-                  <Field label="Origem">
-                    <Select value={form.source} onChange={v => setF('source', v)} options={SOURCES} />
+                  <Field label="Score IA (0–100)">
+                    <div className="flex items-center gap-3">
+                      <input type="range" min={0} max={100} value={form.score ?? 50}
+                        onChange={e => setF('score', e.target.value)}
+                        className="flex-1 accent-[#127284]" />
+                      <span className="text-sm font-bold text-[#127284] w-8">{form.score}</span>
+                    </div>
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -304,19 +262,9 @@ export function LeadEditModal({ lead, open, onClose, onSaved }: Props) {
                     <Input value={form.ip_state} onChange={v => setF('ip_state', v)} placeholder="BA" />
                   </Field>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Field label="Score IA (0–100)">
-                    <div className="flex items-center gap-3">
-                      <input type="range" min={0} max={100} value={form.score ?? 50}
-                        onChange={e => setF('score', e.target.value)}
-                        className="flex-1 accent-[#127284]" />
-                      <span className="text-sm font-bold text-[#127284] w-8">{form.score}</span>
-                    </div>
-                  </Field>
-                  <Field label="Tags (separadas por vírgula)">
-                    <Input value={form.tags} onChange={v => setF('tags', v)} placeholder="quente, financiado, urgente" />
-                  </Field>
-                </div>
+                <Field label="Tags (separadas por vírgula)">
+                  <Input value={form.tags} onChange={v => setF('tags', v)} placeholder="quente, financiado, urgente" />
+                </Field>
                 <Field label="Notas internas">
                   <textarea value={form.notes} onChange={e => setF('notes', e.target.value)}
                     rows={3} placeholder="Observações sobre este lead..."

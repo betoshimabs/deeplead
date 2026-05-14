@@ -42,14 +42,32 @@ export interface Business {
   updated_at?: string;
 }
 
-// --- Leads ---
-export type LeadStatus = 'new' | 'open' | 'pending' | 'resolved' | 'won' | 'lost';
-export type LeadSource =
+// --- Contacts ---
+export type ContactStatus = 'new' | 'contacted' | 'in_progress' | 'converted' | 'lost';
+export type ContactSource =
   | 'whatsapp' | 'instagram' | 'facebook' | 'tiktok'
   | 'website' | 'referral' | 'direct'
   | 'vivareal' | 'zapimoveis' | 'olx'
   | 'import' | 'form';
 
+export interface Contact {
+  id: string;
+  business_id: string;
+  name: string;
+  phone?: string;
+  secondary_phone?: string;
+  email?: string;
+  cpf?: string;
+  birthdate?: string;
+  avatar_url?: string;
+  source?: ContactSource;
+  status: ContactStatus;
+  notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+// --- Leads ---
 export type EmploymentType = 'clt' | 'autonomous' | 'business_owner' | 'retired' | 'other';
 export type MaritalStatus = 'single' | 'married' | 'divorced' | 'widowed' | 'other';
 export type QualificationSource = 'ai_flow' | 'manual' | 'import' | 'form';
@@ -58,17 +76,10 @@ export type DeviceType = 'mobile' | 'desktop' | 'tablet';
 export interface Lead {
   id: string;
   business_id: string;
+  contact_id: string;           // FK to crm.contacts — required, NOT NULL
+  contact?: Contact;            // joined from crm.contacts
 
-  // Identity
-  name: string;
-  cpf?: string;
-  birthdate?: string;
-  phone: string;
-  secondary_phone?: string;
-  email?: string;
-  avatar_url?: string;
-
-  // Socioeconomic
+  // Socioeconomic (qualification detail — NOT in contacts)
   occupation?: string;
   employer?: string;
   employment_type?: EmploymentType;
@@ -77,10 +88,8 @@ export interface Lead {
   dependents_count?: number;
 
   // CRM
-  status: LeadStatus;
-  stage: PipelineStage;
-  score: number;               // 0–100
-  source: LeadSource;
+  stage: PipelineStage;         // position in the pipeline
+  score: number;                // 0–100
   assigned_to?: BusinessMember; // joined from core.business_members + core.users
   tags: string[];
   qualification_source?: QualificationSource;

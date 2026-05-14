@@ -17,10 +17,11 @@ import { ptBR } from 'date-fns/locale';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const STATUS_MAP: Record<string, { bg: string; text: string; label: string }> = {
-  new:       { bg: '#EBF7FA', text: '#127284',  label: 'Novo' },
-  contacted: { bg: '#FEF9EC', text: '#CA8A04',  label: 'Contatado' },
-  converted: { bg: '#E6F5EF', text: '#22A06B',  label: 'Convertido' },
-  lost:      { bg: '#FFEAEA', text: '#E03131',  label: 'Perdido' },
+  new:         { bg: '#EBF7FA', text: '#127284',  label: 'Novo' },
+  contacted:   { bg: '#FEF9EC', text: '#CA8A04',  label: 'Contatado' },
+  in_progress: { bg: '#EEF0FF', text: '#5B5EF4',  label: 'Em Progresso' },
+  converted:   { bg: '#E6F5EF', text: '#22A06B',  label: 'Convertido' },
+  lost:        { bg: '#FFEAEA', text: '#E03131',  label: 'Perdido' },
 };
 
 const SOURCE_ICONS: Record<string, string> = {
@@ -249,7 +250,6 @@ export default function ContactsPage() {
           <div className="divide-y divide-[#EDF0F4]">
             {contacts.map(p => {
               const status = STATUS_MAP[p.status] ?? STATUS_MAP.new;
-              const sourceIcon = SOURCE_ICONS[p.source] ?? '📌';
               const isConverted = p.status === 'converted';
 
               return (
@@ -272,7 +272,6 @@ export default function ContactsPage() {
                     </span>
                   </div>
                   <div className="w-[160px] shrink-0 text-sm text-[#555D6F] flex items-center gap-1.5">
-                    <span>{sourceIcon}</span>
                     <span className="capitalize">{p.source}</span>
                   </div>
                   <div className="w-[120px] shrink-0 text-xs text-[#8A9BB0]">

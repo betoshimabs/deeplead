@@ -18,14 +18,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json();
   const { real_estate_profile, _log_activity, ...leadUpdates } = body;
 
-  // Fetch current values for activity logging
+  // Fetch current stage for activity logging
   let prevStage: string | null = null;
-  let prevStatus: string | null = null;
   if (_log_activity !== false) {
     const { data: cur } = await admin.schema('crm').from('leads')
-      .select('stage, status').eq('id', id).single();
+      .select('stage').eq('id', id).single();
     prevStage  = cur?.stage  ?? null;
-    prevStatus = cur?.status ?? null;
   }
 
   if (Object.keys(leadUpdates).length > 0) {
@@ -49,10 +47,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     visit_scheduled: 'Visita Agendada', proposal: 'Proposta',
     negotiation: 'Negociação', won: 'Fechado', lost: 'Perdido',
   };
-  const STATUS_LABELS: Record<string, string> = {
-    new: 'Novo', open: 'Aberto', pending: 'Pendente',
-    resolved: 'Resolvido', won: 'Ganho', lost: 'Perdido',
-  };
 
   if (leadUpdates.stage && prevStage && leadUpdates.stage !== prevStage) {
     await admin.rpc('log_activity', {
@@ -60,14 +54,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       p_description: `Etapa alterada: ${STAGE_LABELS[prevStage] ?? prevStage} → ${STAGE_LABELS[leadUpdates.stage] ?? leadUpdates.stage}`,
       p_actor_id: actorId,
       p_metadata: { from: prevStage, to: leadUpdates.stage },
-    });
-  }
-  if (leadUpdates.status && prevStatus && leadUpdates.status !== prevStatus) {
-    await admin.rpc('log_activity', {
-      p_lead_id: id, p_type: 'status_change',
-      p_description: `Status alterado: ${STATUS_LABELS[prevStatus] ?? prevStatus} → ${STATUS_LABELS[leadUpdates.status] ?? leadUpdates.status}`,
-      p_actor_id: actorId,
-      p_metadata: { from: prevStatus, to: leadUpdates.status },
     });
   }
 

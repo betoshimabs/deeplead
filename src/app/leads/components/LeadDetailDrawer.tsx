@@ -12,24 +12,18 @@ import type { Lead } from '@/types';
 import { LeadActivityTimeline } from './LeadActivityTimeline';
 import { apiClient } from '@/lib/apiClient';
 
-const STATUS_MAP: Record<string, { bg: string; text: string; label: string }> = {
-  new:      { bg: '#EBF7FA', text: '#127284', label: 'Novo' },
-  open:     { bg: '#FEF9EC', text: '#CA8A04', label: 'Aberto' },
-  pending:  { bg: '#F4F7FA', text: '#555D6F', label: 'Pendente' },
-  resolved: { bg: '#E6F5EF', text: '#22A06B', label: 'Resolvido' },
-  won:      { bg: '#E6F5EF', text: '#22A06B', label: 'Ganho' },
-  lost:     { bg: '#FFEAEA', text: '#E03131', label: 'Perdido' },
-};
-
 const STAGE_LABELS: Record<string, string> = {
   new_lead: 'Novo Lead', contact_initiated: 'Contato Iniciado',
   visit_scheduled: 'Visita Agendada', proposal: 'Proposta',
   negotiation: 'Negociação', won: 'Fechado', lost: 'Perdido',
 };
 
-const SOURCE_ICONS: Record<string, string> = {
-  whatsapp: '💬', instagram: '📸', facebook: '👤', website: '🌐',
-  referral: '🤝', direct: '📞', tiktok: '🎵', import: '📥',
+const CONTACT_STATUS_MAP: Record<string, { bg: string; text: string; label: string }> = {
+  new:         { bg: '#EBF7FA', text: '#127284', label: 'Novo' },
+  contacted:   { bg: '#FEF9EC', text: '#CA8A04', label: 'Contatado' },
+  in_progress: { bg: '#EEF0FF', text: '#5B5EF4', label: 'Em Progresso' },
+  converted:   { bg: '#E6F5EF', text: '#22A06B', label: 'Convertido' },
+  lost:        { bg: '#FFEAEA', text: '#E03131', label: 'Perdido' },
 };
 
 const TIMELINE_PT: Record<string, string> = {
@@ -124,7 +118,8 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
 
   if (!lead) return null;
 
-  const status = STATUS_MAP[lead.status] ?? STATUS_MAP.new;
+  const contact = (lead as any).contact ?? {};
+  const contactStatus = CONTACT_STATUS_MAP[contact.status] ?? CONTACT_STATUS_MAP.new;
   const profile = lead.real_estate_profile;
   const assignedName = (lead as any).assigned_member?.user?.name;
 
@@ -138,12 +133,12 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#127284] to-[#3BAFC4] flex items-center justify-center text-white font-bold text-lg shrink-0">
-                {lead.name.charAt(0)}
+                {(contact.name ?? '?').charAt(0)}
               </div>
               <div>
-                <h2 className="font-semibold text-[#2F4251] text-base leading-tight">{lead.name}</h2>
+                <h2 className="font-semibold text-[#2F4251] text-base leading-tight">{contact.name}</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: status.bg, color: status.text }}>{status.label}</span>
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: contactStatus.bg, color: contactStatus.text }}>{contactStatus.label}</span>
                   <span className="text-xs text-[#8A9BB0]">{STAGE_LABELS[lead.stage]}</span>
                 </div>
               </div>
@@ -160,7 +155,7 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
                 <MessageSquare size={15} />
                 <span className="text-[10px] font-medium">{navigating ? '...' : 'Chat'}</span>
               </button>
-              <a href={`tel:${lead.phone}`}
+              <a href={`tel:${contact.phone}`}
                 className="flex flex-col items-center gap-1 py-2 rounded-xl bg-[#F4F7FA] hover:bg-[#555D6F] text-[#555D6F] hover:text-white transition-all">
                 <Phone size={15} />
                 <span className="text-[10px] font-medium">Ligar</span>
@@ -192,8 +187,8 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
             <>
               {/* Contact info */}
               <div className="space-y-3">
-                <InfoRow icon={Phone} label="Telefone" value={lead.phone} />
-                {lead.email && <InfoRow icon={Mail} label="E-mail" value={lead.email} />}
+                <InfoRow icon={Phone} label="Telefone" value={contact.phone} />
+                {contact.email && <InfoRow icon={Mail} label="E-mail" value={contact.email} />}
                 {(lead.ip_city || lead.ip_state) && (
                   <InfoRow icon={MapPin} label="Localização" value={[lead.ip_city, lead.ip_state].filter(Boolean).join(' — ')} />
                 )}
@@ -201,7 +196,7 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
                 {lead.last_contact_at && (
                   <InfoRow icon={Clock} label="Último contato" value={formatDistanceToNow(new Date(lead.last_contact_at), { addSuffix: true, locale: ptBR })} />
                 )}
-                <InfoRow icon={Tag} label="Origem" value={`${SOURCE_ICONS[lead.source] ?? ''} ${lead.source}`} />
+                {contact.source && <InfoRow icon={Tag} label="Origem" value={contact.source} />}
                 {assignedName && <InfoRow icon={Users} label="Responsável" value={assignedName} />}
               </div>
 
@@ -258,17 +253,18 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
                 </Section>
               )}
 
-              <Section title="Alterar Status">
+              <Section title="Alterar Etapa">
                 <div className="grid grid-cols-2 gap-2">
-                  {['won', 'lost', 'pending', 'open'].map(s => (
-                    <button key={s} disabled={lead.status === s} onClick={() => onStatusChange(lead.id, s)}
-                      className={`py-2 rounded-xl text-xs font-medium transition-all border ${lead.status === s
-                        ? 'bg-[#F4F7FA] text-[#B8C4D0] border-[#EDF0F4] cursor-default'
-                        : s === 'won' ? 'border-[#22A06B] text-[#22A06B] hover:bg-[#22A06B] hover:text-white'
-                        : s === 'lost' ? 'border-[#E03131] text-[#E03131] hover:bg-[#E03131] hover:text-white'
-                        : 'border-[#DAE1EA] text-[#555D6F] hover:bg-[#F4F7FA]'
+                  {['new_lead','contact_initiated','visit_scheduled','proposal','negotiation','won','lost'].map(s => (
+                    <button key={s} disabled={lead.stage === s} onClick={() => onStatusChange(lead.id, s)}
+                      className={`py-2 rounded-xl text-xs font-medium transition-all border ${
+                        lead.stage === s
+                          ? 'bg-[#F4F7FA] text-[#B8C4D0] border-[#EDF0F4] cursor-default'
+                          : s === 'won'  ? 'border-[#22A06B] text-[#22A06B] hover:bg-[#22A06B] hover:text-white'
+                          : s === 'lost' ? 'border-[#E03131] text-[#E03131] hover:bg-[#E03131] hover:text-white'
+                          : 'border-[#DAE1EA] text-[#555D6F] hover:bg-[#F4F7FA]'
                       }`}>
-                      {STATUS_MAP[s]?.label}
+                      {STAGE_LABELS[s]}
                     </button>
                   ))}
                 </div>
@@ -282,7 +278,7 @@ export function LeadDetailDrawer({ lead, open, onClose, onEdit, onOpenChat, onDe
                   </button>
                 ) : (
                   <div className="bg-[#FFEAEA] rounded-xl p-3">
-                    <p className="text-xs text-[#E03131] font-medium mb-2">Confirma exclusão de {lead.name}?</p>
+          <p className="text-xs text-[#E03131] font-medium mb-2">Confirma exclusão de {contact.name}?</p>
                     <div className="flex gap-2">
                       <button onClick={() => { onDelete(lead.id); setConfirmDelete(false); }}
                         className="flex-1 py-1.5 bg-[#E03131] text-white text-xs font-medium rounded-lg hover:brightness-90">Confirmar</button>

@@ -73,6 +73,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { real_estate_profile, ...leadData } = body;
 
+  // Leads must originate from a contact — contact_id is required
+  if (!leadData.contact_id) {
+    return NextResponse.json(
+      { error: 'contact_id is required. Leads must be created via contact conversion.' },
+      { status: 400 }
+    );
+  }
+
   // Insert lead
   const { data: newLead, error: leadError } = await supabaseAdmin
     .schema('crm')

@@ -34,42 +34,65 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .single();
 
     if (fetchErr) return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
-    if (contact.status === 'converted') return NextResponse.json({ error: 'Already converted' }, { status: 400 });
+    if (contact.status === 'converted' || contact.status === 'in_progress') {
+      return NextResponse.json({ error: 'Contact already has an active lead' }, { status: 400 });
+    }
 
-    // 2. Insert into leads
+    // 2. Check if a lead already exists for this contact (safety check)
+    const { data: existingLead } = await supabaseAdmin
+      .schema('crm')
+      .from('leads')
+      .select('id')
+      .eq('contact_id', id)
+      .maybeSingle();
+
+    if (existingLead) {
+      return NextResponse.json({ error: 'Lead already exists for this contact' }, { status: 400 });
+    }
+
+    // 3. Insert lead linked to contact — identity comes from contact via JOIN
     const { data: newLead, error: insertErr } = await supabaseAdmin
       .schema('crm')
       .from('leads')
       .insert({
         business_id: contact.business_id,
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email,
-        source: contact.source,
-        notes: contact.notes,
-        stage: 'new_lead',
-        status: 'new',
-        score: 50, // Default base score
+        contact_id:  id,
+        stage:       'new_lead',
+        score:       50,
+        notes:       contact.notes ?? null,
       })
       .select()
       .single();
 
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
 
-    // 3. Mark contact as converted
+    // 4. Mark contact as in_progress
     await supabaseAdmin
       .schema('crm')
       .from('contacts')
-      .update({ status: 'converted' })
+      .update({ status: 'in_progress' })
       .eq('id', id);
 
-    // 4. Log activity
+    // 5. Auto-create WhatsApp conversation so the chat tab is ready immediately
+    //    (status 'new' = waiting for first message; won't appear as unread)
+    await supabaseAdmin
+      .schema('messaging')
+      .from('conversations')
+      .insert({
+        business_id:  contact.business_id,
+        lead_id:      newLead.id,
+        channel:      'whatsapp',
+        status:       'new',
+        unread_count: 0,
+      });
+
+    // 6. Log activity
     await supabaseAdmin.rpc('log_activity', {
-      p_lead_id: newLead.id,
-      p_actor_id: userId,
-      p_type: 'import',
+      p_lead_id:    newLead.id,
+      p_actor_id:   userId,
+      p_type:       'import',
       p_description: 'Contato convertido em Lead.',
-      p_metadata: { from_contact_id: contact.id }
+      p_metadata:   { from_contact_id: contact.id }
     });
 
     return NextResponse.json({ success: true, newLeadId: newLead.id });
