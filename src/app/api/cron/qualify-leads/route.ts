@@ -121,7 +121,7 @@ REGRAS:
           method: "POST",
           headers: { 
             "Content-Type": "application/json", 
-            "Authorization": \`Bearer \${DEEPSEEK_API_KEY}\`
+            "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
           },
           body: JSON.stringify({
             model: "deepseek-v4-flash",
@@ -129,14 +129,14 @@ REGRAS:
             temperature: 0.1,
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: \`DADOS ATUAIS:\\n\${JSON.stringify(currentData, null, 2)}\\n\\nMENSAGENS:\\n\${formattedTranscript}\` }
+              { role: "user", content: `DADOS ATUAIS:\n${JSON.stringify(currentData, null, 2)}\n\nMENSAGENS:\n${formattedTranscript}` }
             ]
           })
         });
 
         if (!dsRes.ok) {
           const errText = await dsRes.text();
-          console.error(\`DeepSeek API Error for \${conversationId}:\`, errText);
+          console.error(`DeepSeek API Error for ${conversationId}:`, errText);
           return { conversationId, status: 'error', detail: errText };
         }
 
@@ -145,7 +145,7 @@ REGRAS:
         try {
           aiResult = JSON.parse(dsData.choices[0].message.content);
         } catch (e) {
-          console.error(\`Failed to parse JSON for \${conversationId}:\`, dsData.choices[0].message.content);
+          console.error(`Failed to parse JSON for ${conversationId}:`, dsData.choices[0].message.content);
           return { conversationId, status: 'error', detail: 'invalid JSON' };
         }
 
@@ -173,8 +173,8 @@ REGRAS:
         }
 
         if (aiResult.new_notes) {
-          const existingNotes = lead.notes ? \`\${lead.notes}\\n\\n\` : '';
-          const updatedNotes = \`\${existingNotes}*[IA Qualificação]: \${aiResult.new_notes}*\`;
+          const existingNotes = lead.notes ? `${lead.notes}\n\n` : '';
+          const updatedNotes = `${existingNotes}*[IA Qualificação]: ${aiResult.new_notes}*`;
           await supabaseAdmin.schema('crm').from('leads').update({ notes: updatedNotes }).eq('id', conv.lead_id);
         }
 
@@ -188,7 +188,7 @@ REGRAS:
 
         // 6. Broadcast update if something was changed so UI updates
         if (hasUpdates) {
-          await supabaseAdmin.channel(\`business_chat_\${conv.business_id}\`).send({
+          await supabaseAdmin.channel(`business_chat_${conv.business_id}`).send({
             type: 'broadcast',
             event: 'conversation_updated',
             payload: { conversation_id: conversationId },
@@ -197,7 +197,7 @@ REGRAS:
 
         return { conversationId, status: 'success', hasUpdates };
       } catch (err: any) {
-        console.error(\`Exception processing \${conversationId}:\`, err);
+        console.error(`Exception processing ${conversationId}:`, err);
         return { conversationId, status: 'error', detail: err.message };
       }
     });
@@ -205,7 +205,7 @@ REGRAS:
     const results = await Promise.all(promises);
 
     return NextResponse.json({ 
-      message: \`Processed \${uniqueConvIds.length} conversations\`,
+      message: `Processed ${uniqueConvIds.length} conversations`,
       results 
     });
 
