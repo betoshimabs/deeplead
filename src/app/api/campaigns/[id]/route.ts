@@ -70,12 +70,21 @@ export async function DELETE(
     return NextResponse.json({ error: 'Campanha não encontrada.' }, { status: 404 });
   }
 
-  // 2. Delete CSV from storage (best-effort)
+  // 2. Get contact IDs from this campaign (before cascade delete)
+  const { data: campaignContacts } = await admin
+    .schema('campaigns')
+    .from('campaign_contacts')
+    .select('contact_id')
+    .eq('campaign_id', id);
+
+  const contactIds = (campaignContacts ?? []).map((r: any) => r.contact_id);
+
+  // 3. Delete CSV from storage (best-effort)
   if (campaign.export_url) {
     await admin.storage.from('campaign-exports').remove([campaign.export_url]);
   }
 
-  // 3. Delete campaign record (campaign_contacts cascades via FK)
+  // 4. Delete campaign record (campaign_contacts cascades via FK)
   const { error: deleteErr } = await admin
     .schema('campaigns')
     .from('campaigns')
@@ -84,6 +93,15 @@ export async function DELETE(
 
   if (deleteErr) {
     return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  }
+
+  // 5. Revert contacts → 'lost'
+  //    Skip in_progress and converted (they have active leads — don't touch them)
+  if (contactIds.length > 0) {
+    await admin.schema('crm').from('contacts')
+      .update({ status: 'lost' })
+      .in('id', contactIds)
+      .not('status', 'in', '("in_progress","converted")');
   }
 
   return NextResponse.json({ success: true });
