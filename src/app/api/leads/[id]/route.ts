@@ -79,13 +79,17 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: fetchErr.message }, { status: 400 });
     }
 
-    // 2. Log activity (best-effort — don't block if RPC fails)
-    await admin.rpc('log_activity', {
-      p_lead_id: id, p_type: 'note',
-      p_description: 'Lead removido do sistema.',
-      p_actor_id: DEMO_ACTOR,
-      p_metadata: { stage_at_deletion: lead?.stage ?? null },
-    }).catch((e: unknown) => console.warn('[DELETE /leads] log_activity skipped:', e));
+    // 2. Log activity (best-effort — PostgrestBuilder is not a native Promise, use try/catch)
+    try {
+      await admin.rpc('log_activity', {
+        p_lead_id: id, p_type: 'note',
+        p_description: 'Lead removido do sistema.',
+        p_actor_id: DEMO_ACTOR,
+        p_metadata: { stage_at_deletion: lead?.stage ?? null },
+      });
+    } catch (e) {
+      console.warn('[DELETE /leads] log_activity skipped:', e);
+    }
 
     // 3. Delete the lead (FK cascade handles related rows)
     const { error: deleteErr } = await admin.schema('crm').from('leads').delete().eq('id', id);
