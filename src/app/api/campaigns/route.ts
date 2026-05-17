@@ -123,17 +123,43 @@ export async function POST(req: NextRequest) {
 
     await admin.schema('campaigns').from('campaign_contacts').insert(snapshots);
 
-    // 6. Update ALL contact statuses → 'contacted'
-    //    Regardless of prior status, a campaign outreach means they've been contacted.
-    //    Exception: 'converted' and 'in_progress' are not touched (they're active).
-    const toContactIds = contacts
-      .filter((c: any) => !['converted', 'in_progress'].includes(c.status))
-      .map((c: any) => c.id);
+    // 6. Auto-create leads for contacts that don't have one yet
+    const allContactIds = contacts.map((c: any) => c.id);
 
-    if (toContactIds.length > 0) {
+    // Find contacts that already have an active lead in this business
+    const { data: existingLeads } = await admin.schema('crm').from('leads')
+      .select('contact_id')
+      .eq('business_id', businessId)
+      .in('contact_id', allContactIds);
+
+    const existingLeadContactIds = new Set(
+      (existingLeads ?? []).map((l: any) => l.contact_id)
+    );
+
+    // Create leads only for contacts without an existing lead
+    const newLeads = contacts
+      .filter((c: any) => !existingLeadContactIds.has(c.id))
+      .map((c: any) => ({
+        business_id: businessId,
+        contact_id:  c.id,
+        stage:       'contact_initiated',
+        score:       10,
+        notes:       `Lead criado automaticamente via campanha "${name}".`,
+        tags:        [] as string[],
+      }));
+
+    if (newLeads.length > 0) {
+      await admin.schema('crm').from('leads').insert(newLeads);
+    }
+
+    // 7. Update contact status
+    //    - Contacts with new leads → 'in_progress'
+    //    - Already active ('in_progress', 'converted') → untouched
+    const newLeadContactIds = newLeads.map((l: any) => l.contact_id);
+    if (newLeadContactIds.length > 0) {
       await admin.schema('crm').from('contacts')
-        .update({ status: 'contacted' })
-        .in('id', toContactIds);
+        .update({ status: 'in_progress' })
+        .in('id', newLeadContactIds);
     }
 
     // 7. Return signed URL
