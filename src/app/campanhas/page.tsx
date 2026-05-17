@@ -183,9 +183,9 @@ function CampaignDetailPanel({ id, onClose, onDeleted }: { id: string; onClose: 
   const [data, setData]         = useState<any>(null);
   const [loading, setLoading]   = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirm(`Excluir a campanha "${data?.name}"? O arquivo CSV também será removido.`)) return;
     setDeleting(true);
     try {
       await apiClient(`/api/campaigns/${id}`, { method: 'DELETE' });
@@ -195,6 +195,7 @@ function CampaignDetailPanel({ id, onClose, onDeleted }: { id: string; onClose: 
       alert(e.message ?? 'Erro ao excluir campanha.');
     } finally {
       setDeleting(false);
+      setDeleteModalOpen(false);
     }
   };
 
@@ -277,7 +278,7 @@ function CampaignDetailPanel({ id, onClose, onDeleted }: { id: string; onClose: 
             {/* Danger zone */}
             <div className="border-t border-[#EDF0F4] pt-4">
               <button
-                onClick={handleDelete}
+                onClick={() => setDeleteModalOpen(true)}
                 disabled={deleting}
                 className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-[#E03131] border border-[#E03131]/30 rounded-xl hover:bg-[#FFEAEA] disabled:opacity-50 transition-all">
                 <Trash2 size={14} />
@@ -314,6 +315,50 @@ function CampaignDetailPanel({ id, onClose, onDeleted }: { id: string; onClose: 
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !deleting && setDeleteModalOpen(false)} />
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 relative shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-[#FFEAEA] flex items-center justify-center shrink-0">
+                <Trash2 size={24} className="text-[#E03131]" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#2F4251]">Excluir Campanha?</h3>
+                <p className="text-sm text-[#8A9BB0] mt-1">
+                  Você está prestes a excluir a campanha <strong className="text-[#2F4251]">"{data?.name}"</strong> e o seu arquivo CSV correspondente.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#FFF4F4] border border-[#FFDADA] rounded-xl p-4 mt-2 flex items-start gap-3">
+              <div className="mt-0.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E03131" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <p className="text-sm text-[#C92A2A] font-medium leading-snug">
+                Aviso: Todos os leads relacionados a esta campanha serão excluídos e voltarão ao status de apenas contatos.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button 
+                onClick={() => setDeleteModalOpen(false)} 
+                disabled={deleting}
+                className="flex-1 py-2.5 text-sm font-medium text-[#2F4251] bg-[#F4F7FA] rounded-xl hover:bg-[#EAEFF4] transition-all disabled:opacity-50">
+                Cancelar
+              </button>
+              <button 
+                onClick={handleDelete} 
+                disabled={deleting}
+                className="flex-1 py-2.5 text-sm font-medium text-white bg-[#E03131] rounded-xl hover:bg-[#C92A2A] transition-all flex justify-center items-center gap-2 disabled:opacity-50">
+                {deleting ? 'Excluindo...' : 'Sim, excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
