@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApp } from '@/context/AppContext';
 import { apiClient } from '@/lib/apiClient';
-import { Plus, Download, Users, FileText, ExternalLink, MapPin, Search, X } from 'lucide-react';
+import { Plus, Download, Users, FileText, ExternalLink, MapPin, Search, X, ChevronRight, ArrowLeft, Calendar, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -178,6 +178,120 @@ function PreviewPanel({ contacts, total, loading }: { contacts: any[]; total: nu
   );
 }
 
+/* ─── Campaign Detail Panel ─────────────────────────────────────────────────── */
+function CampaignDetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
+  const [data, setData]       = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiClient(`/api/campaigns/${id}`)
+      .then(r => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const contacts: any[] = data?.contacts ?? [];
+  const s = data ? (ST_MAP[data.status] ?? ST_MAP.completed) : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      {/* Panel */}
+      <div className="w-full max-w-md bg-white h-full flex flex-col shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-[#EDF0F4]">
+          <button onClick={onClose} className="text-[#8A9BB0] hover:text-[#2F4251] transition-colors">
+            <ArrowLeft size={18} />
+          </button>
+          <div className="flex-1 min-w-0">
+            {loading ? (
+              <div className="h-5 w-40 bg-[#F4F7FA] rounded animate-pulse" />
+            ) : (
+              <>
+                <p className="font-semibold text-[#2F4251] truncate">{data?.name}</p>
+                {s && <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: s.bg, color: s.text }}>{s.label}</span>}
+              </>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex-1 p-5 space-y-3">
+            {[1,2,3,4].map(i => <div key={i} className="h-10 bg-[#F4F7FA] rounded-xl animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Contatos', value: data?.contact_count ?? 0 },
+                { label: 'Template', value: data?.export_template ?? '—' },
+                { label: 'Criada em', value: data?.created_at ? format(new Date(data.created_at), 'd MMM yy', { locale: ptBR }) : '—' },
+              ].map(s => (
+                <div key={s.label} className="bg-[#F4F7FA] rounded-xl p-3 text-center">
+                  <p className="text-sm font-bold text-[#2F4251]">{s.value}</p>
+                  <p className="text-xs text-[#8A9BB0] mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Notes */}
+            {data?.notes && (
+              <div className="bg-[#EBF7FA] rounded-xl px-4 py-3">
+                <p className="text-xs text-[#127284]">{data.notes}</p>
+              </div>
+            )}
+
+            {/* Download */}
+            <div>
+              <p className="text-xs font-semibold text-[#8A9BB0] uppercase tracking-wide mb-2">Exportar</p>
+              {data?.export_signed_url ? (
+                <a href={data.export_signed_url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-2 w-full px-4 py-3 bg-[#127284] text-white text-sm font-medium rounded-xl hover:bg-[#3BAFC4] transition-all">
+                  <Download size={15} />
+                  Baixar CSV
+                  <span className="ml-auto text-white/70 text-xs">.csv</span>
+                </a>
+              ) : (
+                <p className="text-sm text-[#B8C4D0]">Arquivo não disponível.</p>
+              )}
+            </div>
+
+            {/* Contacts */}
+            <div>
+              <p className="text-xs font-semibold text-[#8A9BB0] uppercase tracking-wide mb-2">Contatos na campanha ({contacts.length})</p>
+              <div className="space-y-1.5">
+                {contacts.length === 0 && (
+                  <p className="text-sm text-[#B8C4D0] text-center py-4">Nenhum contato registrado.</p>
+                )}
+                {contacts.map((c: any, i: number) => (
+                  <div key={i} className="flex items-center gap-2.5 px-3 py-2.5 bg-[#F4F7FA] rounded-xl">
+                    <div className="w-8 h-8 rounded-full bg-[#127284]/10 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-[#127284]">{c.name?.[0]?.toUpperCase() ?? '?'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-[#2F4251] truncate">{c.name}</p>
+                      <p className="text-xs text-[#8A9BB0] truncate">{c.phone ?? c.email ?? '—'}{c.city ? ` · ${c.city}` : ''}</p>
+                    </div>
+                    {c.status && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-md font-medium shrink-0"
+                        style={{ backgroundColor: `${STATUS_CLR[c.status]}15`, color: STATUS_CLR[c.status] }}>
+                        {STATUS_LABEL[c.status] ?? c.status}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ─────────────────────────────────────────────────────────────── */
 export default function CampanhasPage() {
   const { activeBusinessId: businessId } = useApp();
@@ -185,6 +299,7 @@ export default function CampanhasPage() {
   const [loading, setLoading]       = useState(true);
   const [open, setOpen]             = useState(false);
   const [saving, setSaving]         = useState(false);
+  const [detailId, setDetailId]     = useState<string | null>(null);
 
   // Form
   const [name, setName]             = useState('');
@@ -313,9 +428,11 @@ export default function CampanhasPage() {
         ) : campaigns.map(c => {
           const s = ST_MAP[c.status] ?? ST_MAP.completed;
           return (
-            <div key={c.id} className="bg-white rounded-2xl border border-[#DAE1EA] p-5 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-[#EBF7FA] flex items-center justify-center shrink-0">
-                <ExternalLink size={16} className="text-[#127284]" />
+            <div key={c.id}
+              onClick={() => setDetailId(c.id)}
+              className="bg-white rounded-2xl border border-[#DAE1EA] p-5 flex items-center gap-4 cursor-pointer hover:border-[#3BAFC4] hover:shadow-md transition-all group">
+              <div className="w-10 h-10 rounded-xl bg-[#EBF7FA] flex items-center justify-center shrink-0 group-hover:bg-[#127284] transition-colors">
+                <ExternalLink size={16} className="text-[#127284] group-hover:text-white transition-colors" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -325,16 +442,11 @@ export default function CampanhasPage() {
                 <div className="flex items-center gap-4 text-xs text-[#8A9BB0]">
                   <span className="flex items-center gap-1"><Users size={11} />{(c.contact_count ?? 0).toLocaleString('pt-BR')} contatos</span>
                   <span className="flex items-center gap-1"><FileText size={11} />{c.export_template ?? 'full'}</span>
-                  <span>{format(new Date(c.created_at), "d MMM yyyy", { locale: ptBR })}</span>
+                  <span className="flex items-center gap-1"><Calendar size={11} />{format(new Date(c.created_at), "d MMM yyyy", { locale: ptBR })}</span>
                 </div>
                 {c.notes && <p className="text-xs text-[#8A9BB0] mt-1 truncate">{c.notes}</p>}
               </div>
-              {c.export_signed_url && (
-                <a href={c.export_signed_url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl bg-[#EBF7FA] text-[#127284] hover:bg-[#127284] hover:text-white transition-all shrink-0">
-                  <Download size={13} /> Baixar CSV
-                </a>
-              )}
+              <ChevronRight size={16} className="text-[#B8C4D0] group-hover:text-[#127284] transition-colors shrink-0" />
             </div>
           );
         })}
@@ -473,6 +585,9 @@ export default function CampanhasPage() {
           </div>
         </div>
       )}
+
+      {/* Campaign Detail Panel */}
+      {detailId && <CampaignDetailPanel id={detailId} onClose={() => setDetailId(null)} />}
     </AppLayout>
   );
 }

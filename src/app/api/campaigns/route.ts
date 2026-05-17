@@ -123,15 +123,17 @@ export async function POST(req: NextRequest) {
 
     await admin.schema('campaigns').from('campaign_contacts').insert(snapshots);
 
-    // 6. Update contact status: new → contacted
-    const toUpdateIds = contacts
-      .filter((c: any) => c.status === 'new')
+    // 6. Update ALL contact statuses → 'contacted'
+    //    Regardless of prior status, a campaign outreach means they've been contacted.
+    //    Exception: 'converted' and 'in_progress' are not touched (they're active).
+    const toContactIds = contacts
+      .filter((c: any) => !['converted', 'in_progress'].includes(c.status))
       .map((c: any) => c.id);
 
-    if (toUpdateIds.length > 0) {
+    if (toContactIds.length > 0) {
       await admin.schema('crm').from('contacts')
         .update({ status: 'contacted' })
-        .in('id', toUpdateIds);
+        .in('id', toContactIds);
     }
 
     // 7. Return signed URL
