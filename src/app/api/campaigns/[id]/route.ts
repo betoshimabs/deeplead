@@ -95,13 +95,13 @@ export async function DELETE(
     return NextResponse.json({ error: deleteErr.message }, { status: 500 });
   }
 
-  // 5. Delete untouched leads created by this campaign
-  //    If the lead is still 'new_lead', it hasn't been engaged with yet.
+  // 5. Delete all leads auto-created by a campaign for these contacts
+  //    Regardless of what stage they progressed to.
   if (contactIds.length > 0) {
     await admin.schema('crm').from('leads')
       .delete()
       .in('contact_id', contactIds)
-      .eq('stage', 'new_lead');
+      .like('notes', 'Lead criado automaticamente via campanha%');
       
     // 6. Revert contacts → 'lost'
     //    Now that we deleted the untouched leads, any contact still in 'in_progress'
