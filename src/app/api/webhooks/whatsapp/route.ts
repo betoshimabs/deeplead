@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     const { data: leadRows } = await admin
       .schema('crm')
       .from('leads')
-      .select('id')
+      .select('id, stage')
       .eq('contact_id', contactId)
       .limit(1);
 
@@ -102,6 +102,13 @@ export async function POST(req: NextRequest) {
 
     if (leadRows && leadRows.length > 0) {
       leadId = leadRows[0].id;
+      
+      // Auto-advance from 'new_lead' to 'contact_initiated' when lead sends a message
+      if (leadRows[0].stage === 'new_lead') {
+        await admin.schema('crm').from('leads')
+          .update({ stage: 'contact_initiated' })
+          .eq('id', leadId);
+      }
     } else {
       // Contact has no lead yet — auto-promote (inbound WhatsApp = intent)
       const { data: newLead, error: lErr } = await admin
