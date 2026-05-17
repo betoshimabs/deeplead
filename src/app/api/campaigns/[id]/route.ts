@@ -95,13 +95,32 @@ export async function DELETE(
     return NextResponse.json({ error: deleteErr.message }, { status: 500 });
   }
 
-  // 5. Revert contacts → 'lost'
-  //    Skip in_progress and converted (they have active leads — don't touch them)
+  // 5. Delete untouched leads created by this campaign
+  //    If the lead is still 'contact_initiated', it hasn't been engaged with yet.
   if (contactIds.length > 0) {
-    await admin.schema('crm').from('contacts')
-      .update({ status: 'lost' })
-      .in('id', contactIds)
-      .not('status', 'in', '("in_progress","converted")');
+    await admin.schema('crm').from('leads')
+      .delete()
+      .in('contact_id', contactIds)
+      .eq('stage', 'contact_initiated');
+      
+    // 6. Revert contacts → 'lost'
+    //    Now that we deleted the untouched leads, any contact still in 'in_progress'
+    //    might actually have lost their only lead.
+    //    To be safe, we just set all campaign contacts to 'lost' UNLESS they still have an active lead.
+    
+    // First, find which of these contacts STILL have active leads
+    const { data: remainingLeads } = await admin.schema('crm').from('leads')
+      .select('contact_id')
+      .in('contact_id', contactIds);
+      
+    const contactsWithLeads = new Set((remainingLeads ?? []).map((l: any) => l.contact_id));
+    const contactsToRevert = contactIds.filter(id => !contactsWithLeads.has(id));
+
+    if (contactsToRevert.length > 0) {
+      await admin.schema('crm').from('contacts')
+        .update({ status: 'lost' })
+        .in('id', contactsToRevert);
+    }
   }
 
   return NextResponse.json({ success: true });

@@ -289,7 +289,7 @@ function ChatContent() {
 
   // Load full lead details when conversation is selected
   useEffect(() => {
-    if (!selectedId || !selected) {
+    if (!selectedId || !selected || !selected.lead.id) {
       setFullLead(null);
       return;
     }
@@ -436,7 +436,7 @@ function ChatContent() {
             </div>
             {/* Status filter tabs */}
             <div className="flex gap-1 mt-2">
-              {[{ v: '', l: 'Todos' }, { v: 'new', l: 'Novos' }, { v: 'open', l: 'Abertos' }, { v: 'pending', l: 'Pendentes' }].map(({ v, l }) => (
+              {[{ v: '', l: 'Todos' }, { v: 'new', l: 'Novos' }, { v: 'open', l: 'Abertos' }, { v: 'pending', l: 'Pendentes' }, { v: 'archived', l: 'Arquivados' }].map(({ v, l }) => (
                 <button key={v} onClick={() => setStatusFilter(v)}
                   className={`flex-1 py-1 rounded-lg text-[10px] font-medium transition-all ${statusFilter === v ? 'bg-[#127284] text-white' : 'text-[#8A9BB0] hover:text-[#2F4251]'}`}>
                   {l}
