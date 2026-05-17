@@ -96,12 +96,12 @@ export async function DELETE(
   }
 
   // 5. Delete untouched leads created by this campaign
-  //    If the lead is still 'contact_initiated', it hasn't been engaged with yet.
+  //    If the lead is still 'new_lead', it hasn't been engaged with yet.
   if (contactIds.length > 0) {
     await admin.schema('crm').from('leads')
       .delete()
       .in('contact_id', contactIds)
-      .eq('stage', 'contact_initiated');
+      .eq('stage', 'new_lead');
       
     // 6. Revert contacts → 'lost'
     //    Now that we deleted the untouched leads, any contact still in 'in_progress'

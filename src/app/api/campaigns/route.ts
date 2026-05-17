@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       .map((c: any) => ({
         business_id: businessId,
         contact_id:  c.id,
-        stage:       'contact_initiated',
+        stage:       'new_lead',
         score:       10,
         notes:       `Lead criado automaticamente via campanha "${name}".`,
         tags:        [] as string[],
