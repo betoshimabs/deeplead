@@ -50,3 +50,41 @@ export async function GET(
     },
   });
 }
+
+// DELETE /api/campaigns/[id]
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  // 1. Fetch campaign so we know the storage path
+  const { data: campaign, error: fetchErr } = await admin
+    .schema('campaigns')
+    .from('campaigns')
+    .select('id, export_url')
+    .eq('id', id)
+    .single();
+
+  if (fetchErr || !campaign) {
+    return NextResponse.json({ error: 'Campanha não encontrada.' }, { status: 404 });
+  }
+
+  // 2. Delete CSV from storage (best-effort)
+  if (campaign.export_url) {
+    await admin.storage.from('campaign-exports').remove([campaign.export_url]);
+  }
+
+  // 3. Delete campaign record (campaign_contacts cascades via FK)
+  const { error: deleteErr } = await admin
+    .schema('campaigns')
+    .from('campaigns')
+    .delete()
+    .eq('id', id);
+
+  if (deleteErr) {
+    return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}

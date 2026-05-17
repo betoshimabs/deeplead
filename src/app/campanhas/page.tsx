@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useApp } from '@/context/AppContext';
 import { apiClient } from '@/lib/apiClient';
-import { Plus, Download, Users, FileText, ExternalLink, MapPin, Search, X, ChevronRight, ArrowLeft, Calendar, Filter } from 'lucide-react';
+import { Plus, Download, Users, FileText, ExternalLink, MapPin, Search, X, ChevronRight, ArrowLeft, Calendar, Filter, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -179,9 +179,24 @@ function PreviewPanel({ contacts, total, loading }: { contacts: any[]; total: nu
 }
 
 /* ─── Campaign Detail Panel ─────────────────────────────────────────────────── */
-function CampaignDetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
-  const [data, setData]       = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+function CampaignDetailPanel({ id, onClose, onDeleted }: { id: string; onClose: () => void; onDeleted: () => void }) {
+  const [data, setData]         = useState<any>(null);
+  const [loading, setLoading]   = useState(true);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirm(`Excluir a campanha "${data?.name}"? O arquivo CSV também será removido.`)) return;
+    setDeleting(true);
+    try {
+      await apiClient(`/api/campaigns/${id}`, { method: 'DELETE' });
+      onDeleted();
+      onClose();
+    } catch (e: any) {
+      alert(e.message ?? 'Erro ao excluir campanha.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -244,7 +259,7 @@ function CampaignDetailPanel({ id, onClose }: { id: string; onClose: () => void 
               </div>
             )}
 
-            {/* Download */}
+            {/* Download + Delete */}
             <div>
               <p className="text-xs font-semibold text-[#8A9BB0] uppercase tracking-wide mb-2">Exportar</p>
               {data?.export_signed_url ? (
@@ -257,6 +272,17 @@ function CampaignDetailPanel({ id, onClose }: { id: string; onClose: () => void 
               ) : (
                 <p className="text-sm text-[#B8C4D0]">Arquivo não disponível.</p>
               )}
+            </div>
+
+            {/* Danger zone */}
+            <div className="border-t border-[#EDF0F4] pt-4">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-[#E03131] border border-[#E03131]/30 rounded-xl hover:bg-[#FFEAEA] disabled:opacity-50 transition-all">
+                <Trash2 size={14} />
+                {deleting ? 'Excluindo...' : 'Excluir campanha'}
+              </button>
             </div>
 
             {/* Contacts */}
@@ -587,7 +613,13 @@ export default function CampanhasPage() {
       )}
 
       {/* Campaign Detail Panel */}
-      {detailId && <CampaignDetailPanel id={detailId} onClose={() => setDetailId(null)} />}
+      {detailId && (
+        <CampaignDetailPanel
+          id={detailId}
+          onClose={() => setDetailId(null)}
+          onDeleted={() => { setDetailId(null); load(); }}
+        />
+      )}
     </AppLayout>
   );
 }
