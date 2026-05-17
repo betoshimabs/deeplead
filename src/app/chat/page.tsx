@@ -637,11 +637,6 @@ function ChatContent() {
                       className="w-10 h-10 bg-[#127284] text-white rounded-xl flex items-center justify-center hover:bg-[#3BAFC4] disabled:opacity-40 transition-all">
                       {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                     </button>
-                    <button onClick={() => setInput(aiTip || 'Olá! Como posso te ajudar?')}
-                      title="Sugestão IA"
-                      className="w-10 h-10 bg-[#F4F7FA] text-[#F9795A] rounded-xl flex items-center justify-center hover:bg-[#FEF0EC] transition-all border border-[#DAE1EA]">
-                      <Sparkles size={15} />
-                    </button>
                   </div>
                 </div>
               </div>
