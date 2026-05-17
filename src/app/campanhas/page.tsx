@@ -180,7 +180,7 @@ function PreviewPanel({ contacts, total, loading }: { contacts: any[]; total: nu
 
 /* ─── Main Page ─────────────────────────────────────────────────────────────── */
 export default function CampanhasPage() {
-  const { businessId } = useApp() as any;
+  const { activeBusinessId: businessId } = useApp();
   const [campaigns, setCampaigns]   = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [open, setOpen]             = useState(false);
