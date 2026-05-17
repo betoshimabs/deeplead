@@ -7,8 +7,11 @@ const DEMO_ACTOR = '22222222-0000-0000-0000-000000000001';
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { data, error } = await admin.rpc('get_lead', { p_id: id });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data)  return NextResponse.json({ error: 'Not found' },   { status: 404 });
+  if (error) {
+    console.error('[GET /leads/:id]', error.message);
+    return NextResponse.json({ error: error.message }, { status: 404 });
+  }
+  if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({ data });
 }
 
@@ -61,35 +64,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  try {
+    const { id } = await params;
 
-  // 1. Fetch contact_id and lead stage before deleting
-  const { data: lead } = await admin
-    .schema('crm').from('leads')
-    .select('contact_id, stage')
-    .eq('id', id)
-    .single();
+    // 1. Fetch contact_id and lead stage before deleting
+    const { data: lead, error: fetchErr } = await admin
+      .schema('crm').from('leads')
+      .select('contact_id, stage')
+      .eq('id', id)
+      .single();
 
-  // 2. Log activity (best-effort)
-  await admin.rpc('log_activity', {
-    p_lead_id: id, p_type: 'note',
-    p_description: 'Lead removido do sistema.',
-    p_actor_id: DEMO_ACTOR, p_metadata: { stage_at_deletion: lead?.stage ?? null },
-  }).catch(() => {});
+    if (fetchErr) {
+      console.error('[DELETE /leads] fetch error:', fetchErr.message);
+      return NextResponse.json({ error: fetchErr.message }, { status: 400 });
+    }
 
-  // 3. Delete the lead (cascade removes conversations, messages, activities)
-  const { error } = await admin.schema('crm').from('leads').delete().eq('id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // 2. Log activity (best-effort — don't block if RPC fails)
+    await admin.rpc('log_activity', {
+      p_lead_id: id, p_type: 'note',
+      p_description: 'Lead removido do sistema.',
+      p_actor_id: DEMO_ACTOR,
+      p_metadata: { stage_at_deletion: lead?.stage ?? null },
+    }).catch((e: unknown) => console.warn('[DELETE /leads] log_activity skipped:', e));
 
-  // 4. Revert contact status:
-  //    - 'lost'      → the lead was lost before deletion (eligible for re-engagement)
-  //    - 'contacted' → lead existed but didn't finish pipeline (was in a campaign at some point)
-  if (lead?.contact_id) {
-    const revertStatus = lead.stage === 'lost' ? 'lost' : 'contacted';
-    await admin.schema('crm').from('contacts')
-      .update({ status: revertStatus })
-      .eq('id', lead.contact_id);
+    // 3. Delete the lead (FK cascade handles related rows)
+    const { error: deleteErr } = await admin.schema('crm').from('leads').delete().eq('id', id);
+    if (deleteErr) {
+      console.error('[DELETE /leads] delete error:', deleteErr.message);
+      return NextResponse.json({ error: deleteErr.message }, { status: 400 });
+    }
+
+    // 4. Revert contact status so it becomes eligible for future campaigns
+    if (lead?.contact_id) {
+      const revertStatus = lead.stage === 'lost' ? 'lost' : 'contacted';
+      const { error: contactErr } = await admin.schema('crm').from('contacts')
+        .update({ status: revertStatus })
+        .eq('id', lead.contact_id);
+      if (contactErr) console.warn('[DELETE /leads] contact status revert failed:', contactErr.message);
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[DELETE /leads] unhandled exception:', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true });
 }
