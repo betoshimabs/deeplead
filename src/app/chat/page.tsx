@@ -201,14 +201,14 @@ function ChatContent() {
   );
 
   // Load conversations with scope filter
-  const loadConversations = useCallback(async () => {
-    setLoadingConvs(true);
+  const loadConversations = useCallback(async (silent = false) => {
+    if (!silent) setLoadingConvs(true);
     try {
       const effectiveAssigned = isColaborador ? myMemberId : (scope === 'mine' ? myMemberId : undefined);
       const data = await fetchConversations({ limit: 50, assigned_to: effectiveAssigned ?? undefined });
       setConversations(data);
       if (data.length > 0 && !selectedId && !initialConvId) setSelectedId(data[0].id);
-    } catch { /* silent */ } finally { setLoadingConvs(false); }
+    } catch { /* silent */ } finally { if (!silent) setLoadingConvs(false); }
   }, [selectedId, initialConvId, scope, isColaborador, myMemberId]);
 
   useEffect(() => { loadConversations(); }, [scope]);
@@ -223,21 +223,22 @@ function ChatContent() {
       .catch(() => setWhatsappConnected(false));
   }, [activeBusinessId]);
 
-  // Realtime conversations updates (for insights, modes, etc.)
+  // Realtime conversations updates (for new messages, insights, modes, etc.)
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase.channel('global_conversations')
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*', // Listen to INSERT, UPDATE, DELETE
         schema: 'messaging',
         table: 'conversations'
-      }, payload => {
-        const updated = payload.new as any;
-        setConversations(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
+      }, () => {
+        // Silently reload to fetch the joined data (like lead name, last_message content, etc.)
+        // This ensures the sidebar is always perfectly synced without F5.
+        loadConversations(true);
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [loadConversations]);
 
   // Load messages for selected conversation
   useEffect(() => {
