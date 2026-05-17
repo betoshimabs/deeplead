@@ -83,7 +83,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     try {
       await admin.rpc('log_activity', {
         p_lead_id: id, p_type: 'note',
-        p_description: 'Lead removido do sistema.',
+        p_description: lead?.stage === 'won' ? 'Pipeline concluído com sucesso.' : 'Lead removido — contato marcado como perdido.',
         p_actor_id: DEMO_ACTOR,
         p_metadata: { stage_at_deletion: lead?.stage ?? null },
       });
@@ -98,13 +98,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: deleteErr.message }, { status: 400 });
     }
 
-    // 4. Revert contact status so it becomes eligible for future campaigns
+    // 4. Update contact status:
+    //    - won  → 'converted' (pipeline concluído com sucesso)
+    //    - any other stage → 'lost' (deixou de ser lead por qualquer motivo)
     if (lead?.contact_id) {
-      const revertStatus = lead.stage === 'lost' ? 'lost' : 'contacted';
+      const newContactStatus = lead.stage === 'won' ? 'converted' : 'lost';
       const { error: contactErr } = await admin.schema('crm').from('contacts')
-        .update({ status: revertStatus })
+        .update({ status: newContactStatus })
         .eq('id', lead.contact_id);
-      if (contactErr) console.warn('[DELETE /leads] contact status revert failed:', contactErr.message);
+      if (contactErr) console.warn('[DELETE /leads] contact status update failed:', contactErr.message);
     }
 
     return NextResponse.json({ success: true });
