@@ -137,6 +137,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     payload: data
   });
 
+  // Fetch conversation to get business_id for the broadcast
+  const { data: convInfo } = await supabaseAdmin
+    .schema('messaging')
+    .from('conversations')
+    .select('business_id')
+    .eq('id', id)
+    .single();
+
+  if (convInfo?.business_id) {
+    // Real-time broadcast to frontend (sidebar refresh)
+    await supabaseAdmin.channel(`business_chat_${convInfo.business_id}`).send({
+      type:  'broadcast',
+      event: 'conversation_updated',
+      payload: { conversation_id: id },
+    });
+  }
+
   return NextResponse.json({ data }, { status: 201 });
 }
 

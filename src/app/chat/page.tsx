@@ -207,9 +207,12 @@ function ChatContent() {
       const effectiveAssigned = isColaborador ? myMemberId : (scope === 'mine' ? myMemberId : undefined);
       const data = await fetchConversations({ limit: 50, assigned_to: effectiveAssigned ?? undefined });
       setConversations(data);
-      if (data.length > 0 && !selectedId && !initialConvId) setSelectedId(data[0].id);
+      setSelectedId(prev => {
+        if (data.length > 0 && !prev && !initialConvId) return data[0].id;
+        return prev;
+      });
     } catch { /* silent */ } finally { if (!silent) setLoadingConvs(false); }
-  }, [selectedId, initialConvId, scope, isColaborador, myMemberId]);
+  }, [initialConvId, scope, isColaborador, myMemberId]);
 
   useEffect(() => { loadConversations(); }, [scope]);
 
@@ -225,20 +228,28 @@ function ChatContent() {
 
   // Realtime conversations updates (for new messages, insights, modes, etc.)
   useEffect(() => {
+    if (!activeBusinessId) return;
     const supabase = createClient();
-    const channel = supabase.channel('global_conversations')
+    
+    // We use a custom broadcast event from the server to bypass Postgres RLS WAL limitations
+    const channel = supabase.channel(`business_chat_${activeBusinessId}`)
+      .on('broadcast', { event: 'conversation_updated' }, () => {
+        // Silently reload to fetch the joined data (like lead name, last_message content, etc.)
+        // This ensures the sidebar is always perfectly synced without F5.
+        loadConversations(true);
+      })
+      // Fallback for native DB changes (status changes, etc)
       .on('postgres_changes', {
         event: '*', // Listen to INSERT, UPDATE, DELETE
         schema: 'messaging',
         table: 'conversations'
       }, () => {
-        // Silently reload to fetch the joined data (like lead name, last_message content, etc.)
-        // This ensures the sidebar is always perfectly synced without F5.
         loadConversations(true);
       })
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
-  }, [loadConversations]);
+  }, [activeBusinessId, loadConversations]);
 
   // Load messages for selected conversation
   useEffect(() => {

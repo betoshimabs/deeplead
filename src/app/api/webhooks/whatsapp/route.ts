@@ -204,11 +204,18 @@ export async function POST(req: NextRequest) {
         p_status:      'success',
       });
 
-      // Real-time broadcast to frontend
+      // Real-time broadcast to frontend (specific chat)
       await admin.channel(`chat_${conversationId}`).send({
         type:    'broadcast',
         event:   'new_message',
         payload: messageData,
+      });
+
+      // Real-time broadcast to frontend (sidebar refresh)
+      await admin.channel(`business_chat_${businessId}`).send({
+        type:  'broadcast',
+        event: 'conversation_updated',
+        payload: { conversation_id: conversationId },
       });
     }
 
